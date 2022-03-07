@@ -50,8 +50,8 @@ class State:
             hashed = hashed + '#' + member.hash()
         return hashed
 
-    def __init__(self, gandalf_position, fellowship_members, cost, in_orc_area, passed_through_orc_cells, accompanying_member):
-        self.cost = cost
+    def __init__(self, gandalf_position, fellowship_members, depth, in_orc_area, passed_through_orc_cells, accompanying_member):
+        self.depth = depth
         self.parent = None
         self.reached_by_action = None
         self.gandalf_position = gandalf_position
@@ -84,12 +84,12 @@ class State:
         copied_fellowship_members = []
         for i in range(len(self.fellowship_members)):
             copied_fellowship_members.append(self.fellowship_members[i].get_copy())
-        copied_cost = self.cost
+        copied_depth = self.depth
         copied_in_orc_area = self.in_orc_area
         copied_passed_through_orc_cells = self.passed_through_orc_cells
         copied_accompanying_member = self.accompanying_member
         return State(gandalf_position= copied_gandalf_position, fellowship_members= copied_fellowship_members, 
-            cost= copied_cost, in_orc_area= copied_in_orc_area, passed_through_orc_cells= copied_passed_through_orc_cells, accompanying_member= copied_accompanying_member)
+            depth= copied_depth, in_orc_area= copied_in_orc_area, passed_through_orc_cells= copied_passed_through_orc_cells, accompanying_member= copied_accompanying_member)
 
     def is_illegal_state_by_gandalf_position(self, new_gandalf_position):
         if not self.in_bound(new_gandalf_position):
@@ -147,7 +147,7 @@ class State:
         new_state = self.get_copy()
         new_state.gandalf_position = new_gandalf_position
         new_state.reached_by_action = 'U'
-        new_state.cost = self.cost + 1
+        new_state.depth = self.depth + 1
         new_state.in_orc_area = new_in_orc_area
         new_state.passed_through_orc_cells = new_passed_through_cells
         self.check_accompanying_member(new_state)
@@ -163,7 +163,7 @@ class State:
         new_state = self.get_copy()
         new_state.gandalf_position = new_gandalf_position
         new_state.reached_by_action = 'L'
-        new_state.cost = self.cost + 1
+        new_state.depth = self.depth + 1
         new_state.in_orc_area = new_in_orc_area
         new_state.passed_through_orc_cells = new_passed_through_cells
         self.check_accompanying_member(new_state)
@@ -179,7 +179,7 @@ class State:
         new_state = self.get_copy()
         new_state.gandalf_position = new_gandalf_position
         new_state.reached_by_action = 'D'
-        new_state.cost = self.cost + 1
+        new_state.depth = self.depth + 1
         new_state.in_orc_area = new_in_orc_area
         new_state.passed_through_orc_cells = new_passed_through_cells
         self.check_accompanying_member(new_state)
@@ -195,7 +195,7 @@ class State:
         new_state = self.get_copy()
         new_state.gandalf_position = new_gandalf_position
         new_state.reached_by_action = 'R'
-        new_state.cost = self.cost + 1
+        new_state.depth = self.depth + 1
         new_state.in_orc_area = new_in_orc_area
         new_state.passed_through_orc_cells = new_passed_through_cells
         self.check_accompanying_member(new_state)
@@ -243,6 +243,14 @@ class Base_algorithm(object):
 
         return table
 
+    def calculate_route(self, goal_state):
+        current_state = goal_state
+        output_str = ""
+        while current_state != self.initial_state:
+            output_str = current_state.reached_by_action + output_str
+            current_state = current_state.parent
+        return output_str 
+
     def __init__(self, path_to_file):
         self.input_file = open(path_to_file)
         board_dimensions_str = self.read_next_line()
@@ -261,5 +269,5 @@ class Base_algorithm(object):
         fellowship_members = []
         for i in range(State.initial_number_of_members):
             fellowship_members.append(Fellowship_member(fellowship_members_positions[i], fellowship_members_goals[i]))
-        self.initial_state = State(gandalf_position, fellowship_members, cost = 0, in_orc_area = 0, passed_through_orc_cells = 0, accompanying_member = None)
+        self.initial_state = State(gandalf_position, fellowship_members, depth = 0, in_orc_area = 0, passed_through_orc_cells = 0, accompanying_member = None)
         self.input_file.close()

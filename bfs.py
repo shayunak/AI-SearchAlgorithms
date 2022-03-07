@@ -10,14 +10,6 @@ class BFS(Base_algorithm):
         self.frontier.append(self.initial_state)
         self.frontier_set.add(self.initial_state.hash())
 
-    def calculate_route(self, goal_state):
-        current_state = goal_state
-        output_str = ""
-        while current_state != self.initial_state:
-            output_str = current_state.reached_by_action + output_str
-            current_state = current_state.parent
-        return output_str 
-
     def add_to_frontier_if_possible(self, child_state, parent_state):
         if child_state is None:
             return
