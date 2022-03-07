@@ -1,3 +1,5 @@
+import time
+
 class Point:
     def __init__(self, Row, Column):
         self.Row = Row
@@ -5,6 +7,9 @@ class Point:
     
     def __eq__(self, another_point):
         return self.Row == another_point.Row and self.Column == another_point.Column
+
+    def hash(self):
+        return str(self.Row) + '/' + str(self.Column)
 
     def get_copy(self):
         return Point(self.Row, self.Column)
@@ -18,21 +23,18 @@ class Orc:
         self.Rank = Rank
 
 class Fellowship_member:
-    def __init__(self, Position):
+    def __init__(self, Position, Goal):
         self.Position = Position
-        self.Goal = None
+        self.Goal = Goal
     
+    def hash(self):
+        return self.Position.hash() + '-' + self.Goal.hash()
+
     def get_copy(self):
-        new_member = Fellowship_member(self.Position.get_copy())
-        if self.Goal != None:
-            new_member.Goal = self.Goal.get_copy()
-        return new_member
+        return Fellowship_member(self.Position.get_copy(), self.Goal.get_copy())
 
     def __eq__(self, member):
         return self.Position == member.Position and self.Goal == member.Goal
-
-    def set_goal(self, goal_str):
-        self.Goal = Point(int(goal_str[0]), int(goal_str[1]))
         
 class State:
     board_dimensions = None
@@ -41,9 +43,17 @@ class State:
     initial_number_of_members = 0
     gondor_position = None
 
+    def hash(self):
+        hashed = ""
+        hashed = hashed + self.gandalf_position.hash() + '#' + str(self.passed_through_orc_cells) + '#' + str(self.accompanying_member)
+        for member in self.fellowship_members:
+            hashed = hashed + '#' + member.hash()
+        return hashed
+
     def __init__(self, gandalf_position, fellowship_members, cost, in_orc_area, passed_through_orc_cells, accompanying_member):
         self.cost = cost
         self.parent = None
+        self.reached_by_action = None
         self.gandalf_position = gandalf_position
         self.fellowship_members = fellowship_members
         self.in_orc_area = in_orc_area
@@ -81,11 +91,14 @@ class State:
         return State(gandalf_position= copied_gandalf_position, fellowship_members= copied_fellowship_members, 
             cost= copied_cost, in_orc_area= copied_in_orc_area, passed_through_orc_cells= copied_passed_through_orc_cells, accompanying_member= copied_accompanying_member)
 
-    def is_illegal_state(self):
-        if not self.in_bound(gandalf_position):
+    def is_illegal_state_by_gandalf_position(self, new_gandalf_position):
+        if not self.in_bound(new_gandalf_position):
             return True
-        if State.orc_table[gandalf_position.Row][gandalf_position.Column] == 0:
+        if State.orc_table[new_gandalf_position.Row][new_gandalf_position.Column] == 0:
             return True
+        return False
+
+    def is_illegal_state_by_orc_area(self, in_orc_area, passed_through_orc_cells):
         if State.orcs[in_orc_area - 1].Rank < passed_through_orc_cells:
             return True
         return False
@@ -97,17 +110,15 @@ class State:
             return False    
         return True
 
-    def check_orc_area(self, new_state):
-        new_cell_orc_status = State.orc_table[new_state.gandalf_position.Row][new_state.gandalf_position.Column]
-        if new_cell_orc_status != None:
-            if new_cell_orc_status == new_state.in_orc_area:
-                new_state.passed_through_orc_cells += 1
+    def check_orc_area(self, new_state_gandalf_position, former_state_in_orc_area, former_state_passed_through_orc_cells):
+        new_cell_orc_status = State.orc_table[new_state_gandalf_position.Row][new_state_gandalf_position.Column]
+        if new_cell_orc_status is not None:
+            if new_cell_orc_status == former_state_in_orc_area:
+                return former_state_in_orc_area, former_state_passed_through_orc_cells + 1
             else:
-                new_state.in_orc_area = new_cell_orc_status
-                new_state.passed_through_orc_cells = 1
+                return new_cell_orc_status, 1
         else:
-            new_state.in_orc_area = 0
-            new_state.passed_through_orc_cells = 0
+            return 0, 0
 
     def has_met_member_in_cell(self, state):
         for i in range(len(state.fellowship_members)):
@@ -116,57 +127,77 @@ class State:
         return None
 
     def check_accompanying_member(self, new_state):
-        if accompanying_member != None:
-            new_state.fellowship_members[accompanying_member].Position = new_state.gandalf_position
-            if new_state.fellowship_members[accompanying_member].Position == new_state.fellowship_members[accompanying_member].Goal:
+        if self.accompanying_member is not None:
+            new_state.fellowship_members[self.accompanying_member].Position = new_state.gandalf_position
+            if new_state.fellowship_members[self.accompanying_member].Position == new_state.fellowship_members[self.accompanying_member].Goal:
                 new_state.accompanying_member = None
-                del fellowship_members[accompanying_member]
+                del new_state.fellowship_members[self.accompanying_member]
         else:
             new_state.accompanying_member = self.has_met_member_in_cell(new_state)
 
     def go_up(self): #Action 1
-        new_state = self.get_copy()
-        new_state.gandalf_position.Row -= 1
-        new_state.cost += 1
-        self.check_orc_area(new_state)
-        self.check_accompanying_member(new_state)
-        if new_state.is_illegal_state():
+        new_gandalf_position = Point(self.gandalf_position.Row - 1, self.gandalf_position.Column)
+        if self.is_illegal_state_by_gandalf_position(new_gandalf_position):
             return None
-        else:
-            return new_state
+        new_in_orc_area, new_passed_through_cells = self.check_orc_area(new_gandalf_position, self.in_orc_area, self.passed_through_orc_cells)
+        if self.is_illegal_state_by_orc_area(new_in_orc_area, new_passed_through_cells):
+            return None
+        new_state = self.get_copy()
+        new_state.gandalf_position = new_gandalf_position
+        new_state.reached_by_action = 'U'
+        new_state.cost = self.cost + 1
+        new_state.in_orc_area = new_in_orc_area
+        new_state.passed_through_orc_cells = new_passed_through_cells
+        self.check_accompanying_member(new_state)
+        return new_state
     
     def go_left(self): #Action 2
-        new_state = self.get_copy()
-        new_state.gandalf_position.Column -= 1
-        new_state.cost += 1
-        self.check_orc_area(new_state)
-        self.check_accompanying_member(new_state)
-        if new_state.is_illegal_state():
+        new_gandalf_position = Point(self.gandalf_position.Row, self.gandalf_position.Column - 1)
+        if self.is_illegal_state_by_gandalf_position(new_gandalf_position):
             return None
-        else:
-            return new_state
+        new_in_orc_area, new_passed_through_cells = self.check_orc_area(new_gandalf_position, self.in_orc_area, self.passed_through_orc_cells)
+        if self.is_illegal_state_by_orc_area(new_in_orc_area, new_passed_through_cells):
+            return None
+        new_state = self.get_copy()
+        new_state.gandalf_position = new_gandalf_position
+        new_state.reached_by_action = 'L'
+        new_state.cost = self.cost + 1
+        new_state.in_orc_area = new_in_orc_area
+        new_state.passed_through_orc_cells = new_passed_through_cells
+        self.check_accompanying_member(new_state)
+        return new_state
     
     def go_down(self): #Action 3
-        new_state = self.get_copy()
-        new_state.gandalf_position.Row += 1
-        new_state.cost += 1
-        self.check_orc_area(new_state)
-        self.check_accompanying_member(new_state)
-        if new_state.is_illegal_state():
+        new_gandalf_position = Point(self.gandalf_position.Row + 1, self.gandalf_position.Column)
+        if self.is_illegal_state_by_gandalf_position(new_gandalf_position):
             return None
-        else:
-            return new_state
+        new_in_orc_area, new_passed_through_cells = self.check_orc_area(new_gandalf_position, self.in_orc_area, self.passed_through_orc_cells)
+        if self.is_illegal_state_by_orc_area(new_in_orc_area, new_passed_through_cells):
+            return None
+        new_state = self.get_copy()
+        new_state.gandalf_position = new_gandalf_position
+        new_state.reached_by_action = 'D'
+        new_state.cost = self.cost + 1
+        new_state.in_orc_area = new_in_orc_area
+        new_state.passed_through_orc_cells = new_passed_through_cells
+        self.check_accompanying_member(new_state)
+        return new_state
     
     def go_right(self): #Action 4
-        new_state = self.get_copy()
-        new_state.gandalf_position.Column += 1
-        new_state.cost += 1
-        self.check_orc_area(new_state)
-        self.check_accompanying_member(new_state)
-        if new_state.is_illegal_state():
+        new_gandalf_position = Point(self.gandalf_position.Row, self.gandalf_position.Column + 1)
+        if self.is_illegal_state_by_gandalf_position(new_gandalf_position):
             return None
-        else:
-            return new_state
+        new_in_orc_area, new_passed_through_cells = self.check_orc_area(new_gandalf_position, self.in_orc_area, self.passed_through_orc_cells)
+        if self.is_illegal_state_by_orc_area(new_in_orc_area, new_passed_through_cells):
+            return None
+        new_state = self.get_copy()
+        new_state.gandalf_position = new_gandalf_position
+        new_state.reached_by_action = 'R'
+        new_state.cost = self.cost + 1
+        new_state.in_orc_area = new_in_orc_area
+        new_state.passed_through_orc_cells = new_passed_through_cells
+        self.check_accompanying_member(new_state)
+        return new_state
 
 class Base_algorithm:
     def read_next_line(self):
@@ -175,8 +206,11 @@ class Base_algorithm:
     def new_orc(self, orc_desc_str):
         return Orc(Point(int(orc_desc_str[0]), int(orc_desc_str[1])), int(orc_desc_str[2]))
     
-    def new_member(self, member_desc_str):
-        return Fellowship_member(Point(int(member_desc_str[0]), int(member_desc_str[1])))
+    def new_member_position(self, member_desc_str):
+        return Point(int(member_desc_str[0]), int(member_desc_str[1]))
+    
+    def new_member_goal(self, member_desc_str):
+        return Point(int(member_desc_str[0]), int(member_desc_str[1]))
 
     def initialize_table(self):
         table = []
@@ -214,9 +248,11 @@ class Base_algorithm:
         State.initial_number_of_members = int(number_of_subsidiary_actors[1])
         State.orcs = [self.new_orc(self.read_next_line()) for i in range(number_of_orcs)]
         State.orc_table = self.create_orc_table(State.orcs)
-        fellowship_members = [self.new_member(self.read_next_line()) for i in range(State.initial_number_of_members)]
+        fellowship_members_positions = [self.new_member_position(self.read_next_line()) for i in range(State.initial_number_of_members)]
+        fellowship_members_goals = [self.new_member_goal(self.read_next_line()) for i in range(State.initial_number_of_members)]
+        fellowship_members = []
         for i in range(State.initial_number_of_members):
-            fellowship_members[i].set_goal(self.read_next_line())
+            fellowship_members.append(Fellowship_member(fellowship_members_positions[i], fellowship_members_goals[i]))
         self.initial_state = State(gandalf_position, fellowship_members, cost = 0, in_orc_area = 0, passed_through_orc_cells = 0, accompanying_member = None)
         self.input_file.close()
 
@@ -227,23 +263,44 @@ class BFS(Base_algorithm):
         self.explored = set()
         self.frontier.append(self.initial_state)
 
-    def calculate_route(self):
-        return ""
+    def calculate_route(self, goal_state):
+        current_state = goal_state
+        output_str = ""
+        while current_state != self.initial_state:
+            output_str = current_state.reached_by_action + output_str
+            current_state = current_state.parent
+        return output_str 
+
+    def add_to_frontier_if_possible(self, child_state, parent_state):
+        if child_state is None:
+            return
+        if child_state.hash() not in self.explored:
+            child_state.parent = parent_state
+            self.frontier.append(child_state)
 
     def expand(self, state_to_expand):
+        self.explored.add(state_to_expand.hash())
+        child_up = state_to_expand.go_up()
+        child_left = state_to_expand.go_left()
+        child_down = state_to_expand.go_down()
+        child_right = state_to_expand.go_right()
+        self.add_to_frontier_if_possible(child_up, state_to_expand)
+        self.add_to_frontier_if_possible(child_left, state_to_expand)
+        self.add_to_frontier_if_possible(child_down, state_to_expand)
+        self.add_to_frontier_if_possible(child_right, state_to_expand)
         
-
     def run(self):
+        t = time.time()
         while True:
-            if len(frontier) == 0:
+            if len(self.frontier) == 0:
                 print("impossible to reach our goal!")
                 break
             state_to_expand = self.frontier.pop(0)
             if state_to_expand.is_goal_state():
-                print(self.calculate_route())
+                print(self.calculate_route(state_to_expand))
                 break
             self.expand(state_to_expand)
-
+        print(time.time() - t)
 
 alg = BFS('test_02.txt')
 alg.run()
