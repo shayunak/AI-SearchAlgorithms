@@ -8,10 +8,11 @@ print("****************** Testing BFS algorithm on the Test Set ****************
 print("----------------------------------------------------------------------------")
 for i in range(len(test_set)):
      alg = BFS(test_set[i])
-     output, time_taken = alg.run()
+     output, time_taken, states_seen = alg.run()
      print("Running Test " + str(i + 1) + ":")
      print("output: " + output)
      print("output cost: " + str(len(output)))
+     print("We have seen " + str(states_seen) + " states")
      print("Execution Time: " + str(int(time_taken*1000)) + " ms")
 
 
@@ -22,10 +23,11 @@ print("****************** Testing IDS algorithm on the Test Set ****************
 print("----------------------------------------------------------------------------")
 for i in range(len(test_set)):
     alg = IDS(test_set[i])
-    output, time_taken = alg.run()
+    output, time_taken, states_seen = alg.run()
     print("Running Test " + str(i + 1) + ":")
     print("output: " + output)
     print("output cost: " + str(len(output)))
+    print("We have seen " + str(states_seen) + " states")
     print("Execution Time: " + str(int(10*time_taken)/10) + " s")
 
 print("----------------------------------------------------------------------------")

@@ -32,14 +32,16 @@ class BFS(Base_algorithm):
         
     def run(self):
         t = time.time()
+        states_expanded = 0
         output = "impossible to reach our goal!"
         while True:
             if len(self.frontier) == 0:
                 break
             state_to_expand = self.frontier.pop(0)
+            states_expanded += 1
             self.frontier_set.remove(state_to_expand.hash())
             if state_to_expand.is_goal_state():
                 output = self.calculate_route(state_to_expand)
                 break
             self.expand(state_to_expand)
-        return output, time.time() - t
+        return output, time.time() - t, states_expanded
